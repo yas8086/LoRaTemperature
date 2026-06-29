@@ -1,0 +1,10 @@
+build/
+data/
+*.user
+*.user.*
+*.autosave
+.vscode/
+.idea/
+*.exe
+*.dll
+*.zip
