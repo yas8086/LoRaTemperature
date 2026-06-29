@@ -24,7 +24,7 @@ void CsvWriter::write(const QVector<Sample> &samples) {
         m_out << dt.toString("yyyy-MM-dd HH:mm:ss.zzz") << ","
               << s.nodeId << ","
               << QString::number(s.tempCelsius, 'f', 1) << ","
-              << s.raw << ","
+              << QString("0x%1").arg(s.raw, 4, 16, QChar('0')).toUpper() << ","
               << s.online << ","
               << s.alarm << "\n";
     }

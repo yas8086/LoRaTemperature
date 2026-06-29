@@ -49,6 +49,13 @@ void ModbusWorker::stop() {
     emit statusMessage("已停止");
 }
 
+void ModbusWorker::setSamplePeriod(int ms) {
+    m_cfg.samplePeriodMs = ms;
+    if (m_running && m_timer.isActive()) {
+        m_timer.start(ms);  // 重启定时器，立即应用新周期
+    }
+}
+
 void ModbusWorker::onTimeout() {
     if (!m_master || !m_running) return;
     // 功能码 0x04 读输入寄存器

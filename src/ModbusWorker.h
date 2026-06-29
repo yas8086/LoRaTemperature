@@ -16,6 +16,7 @@ public:
 public slots:
     void start(const AppConfig &cfg);
     void stop();
+    void setSamplePeriod(int ms);   // 运行时更新采集周期
 signals:
     void dataReady(QVector<Sample> samples);
     void error(const QString &msg);

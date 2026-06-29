@@ -6,7 +6,8 @@
 
 void AppConfig::ensureDefaults() {
     if (csvDir.isEmpty()) {
-        csvDir = QCoreApplication::applicationDirPath() + "/data";
+        // 默认使用当前工作目录下的 data 文件夹（项目根目录/data）
+        csvDir = QDir::currentPath() + "/data";
     }
     for (int id = startNodeId; id < startNodeId + nodeCount; ++id) {
         if (!alarmLow.contains(id))  alarmLow[id]  = -10.0;
