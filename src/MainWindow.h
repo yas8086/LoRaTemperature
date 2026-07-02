@@ -55,6 +55,7 @@ private:
     QPushButton *m_csvBtn;
     QPushButton *m_startBtn;
     QPushButton *m_stopBtn;
+    QPushButton *m_refreshPortBtn = nullptr;   // 刷新串口列表
 
     // 温度卡片（网格布局，可多显示几个）
     QWidget       *m_cardContainer;

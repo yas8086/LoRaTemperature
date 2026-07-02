@@ -26,7 +26,7 @@ private slots:
     void onReplyFinished();
 private:
     QModbusRtuSerialClient *m_master = nullptr;
-    QTimer  m_timer;
+    QTimer *m_timer = nullptr;   // 在子线程动态创建，确保事件循环正确
     AppConfig m_cfg;
     int   m_failCount = 0;
     bool  m_running = false;

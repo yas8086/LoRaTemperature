@@ -25,9 +25,53 @@
 #include <QColor>
 #include <QTimer>
 #include <QtMath>
+#include <QPainter>
+#include <QPainterPath>
 #include <random>
 #include <QPlainTextEdit>
 #include <QStringList>
+
+// 生成温度计图标作为窗口 logo
+static QIcon makeThermometerIcon() {
+    const int sz = 64;
+    QPixmap pix(sz, sz);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+    // 温度计球部（红色圆）
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("#e74c3c"));
+    p.drawEllipse(QPointF(sz/2.0, sz*0.82), sz*0.18, sz*0.18);
+    // 玻璃管（白色描边）
+    QPainterPath tube;
+    qreal tubeW = sz*0.14;
+    qreal tubeX = sz/2.0 - tubeW/2.0;
+    qreal tubeTop = sz*0.12;
+    qreal tubeBottom = sz*0.74;
+    tube.addRoundedRect(QRectF(tubeX, tubeTop, tubeW, tubeBottom-tubeTop),
+                        tubeW/2.0, tubeW/2.0);
+    p.setBrush(QColor("#ecf0f1"));
+    p.setPen(QPen(QColor("#bdc3c7"), 1.5));
+    p.drawPath(tube);
+    // 水银柱（红色，从球部向上填充约 60%）
+    QPainterPath mercury;
+    qreal mW = tubeW*0.6;
+    qreal mX = sz/2.0 - mW/2.0;
+    qreal mTop = sz*0.35;
+    qreal mBottom = sz*0.78;
+    mercury.addRoundedRect(QRectF(mX, mTop, mW, mBottom-mTop),
+                           mW/2.0, mW/2.0);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("#e74c3c"));
+    p.drawPath(mercury);
+    // 顶部刻度线
+    p.setPen(QPen(QColor("#7f8c8d"), 1.0));
+    for (int i = 0; i < 4; ++i) {
+        qreal y = tubeTop + (tubeBottom-tubeTop)*(i+1)/5.0;
+        p.drawLine(QPointF(tubeX+tubeW+2, y), QPointF(tubeX+tubeW+7, y));
+    }
+    return QIcon(pix);
+}
 
 // ID 颜色映射（最多 8 个，与 ChartManager 共用同一套颜色）
 const QColor MainWindow::kIdColors[] = {
@@ -47,6 +91,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     qRegisterMetaType<AppConfig>("AppConfig");
 
     setWindowTitle("LoRa 温度监测");
+    setWindowIcon(makeThermometerIcon());
     resize(1200, 880);
     buildUi();
     loadConfig();
@@ -88,8 +133,15 @@ void MainWindow::buildUi() {
     auto *configGroup = new QGroupBox("配置");
     auto *form = new QFormLayout(configGroup);
     m_portCombo = new QComboBox;
+    m_refreshPortBtn = new QPushButton("刷新");
     for (const auto &info : QSerialPortInfo::availablePorts())
         m_portCombo->addItem(info.portName());
+    // 串口选择行：下拉框 + 刷新按钮
+    auto *portRow = new QWidget;
+    auto *portLay = new QHBoxLayout(portRow);
+    portLay->setContentsMargins(0, 0, 0, 0);
+    portLay->addWidget(m_portCombo, 1);
+    portLay->addWidget(m_refreshPortBtn);
     m_baudCombo = new QComboBox;
     m_baudCombo->addItems({"9600","19200","38400","57600","115200"});
     m_slaveSpin = new QSpinBox; m_slaveSpin->setRange(1, 247);
@@ -103,7 +155,7 @@ void MainWindow::buildUi() {
     m_stopBtn->setEnabled(false);
     auto *simBtn = new QPushButton("模拟模式");
 
-    form->addRow("串口", m_portCombo);
+    form->addRow("串口", portRow);
     form->addRow("波特率", m_baudCombo);
     form->addRow("从机地址", m_slaveSpin);
     form->addRow("起始ID", m_startIdSpin);
@@ -178,6 +230,17 @@ void MainWindow::buildUi() {
     connect(m_startBtn, &QPushButton::clicked, this, &MainWindow::onStart);
     connect(m_stopBtn,  &QPushButton::clicked, this, &MainWindow::onStop);
     connect(m_csvBtn,   &QPushButton::clicked, this, &MainWindow::onChooseCsvDir);
+    // 刷新串口列表
+    connect(m_refreshPortBtn, &QPushButton::clicked, this, [this]() {
+        QString cur = m_portCombo->currentText();
+        m_portCombo->clear();
+        for (const auto &info : QSerialPortInfo::availablePorts())
+            m_portCombo->addItem(info.portName());
+        // 尝试恢复之前选中的串口
+        int idx = m_portCombo->findText(cur);
+        if (idx >= 0) m_portCombo->setCurrentIndex(idx);
+        appendLog(QString("串口列表已刷新，共 %1 个").arg(m_portCombo->count()));
+    });
     connect(simBtn,     &QPushButton::clicked, this, [this, simBtn]() {
         if (m_simRunning) {
             onSimStop();

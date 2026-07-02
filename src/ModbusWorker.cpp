@@ -4,8 +4,6 @@
 #include <QDateTime>
 
 ModbusWorker::ModbusWorker(QObject *parent) : QObject(parent) {
-    m_timer.setTimerType(Qt::PreciseTimer);
-    connect(&m_timer, &QTimer::timeout, this, &ModbusWorker::onTimeout);
 }
 
 ModbusWorker::~ModbusWorker() {
@@ -16,6 +14,7 @@ ModbusWorker::~ModbusWorker() {
 void ModbusWorker::start(const AppConfig &cfg) {
     m_cfg = cfg;
     if (m_master) { m_master->deleteLater(); m_master = nullptr; }
+    if (m_timer)  { m_timer->deleteLater(); m_timer = nullptr; }
 
     m_master = new QModbusRtuSerialClient(this);
     m_master->setConnectionParameter(QModbusDevice::SerialPortNameParameter, cfg.portName);
@@ -38,12 +37,16 @@ void ModbusWorker::start(const AppConfig &cfg) {
     m_running = true;
     m_failCount = 0;
     emit statusMessage("采集中");
-    m_timer.start(m_cfg.samplePeriodMs);
+    // 在子线程动态创建 QTimer，确保事件循环正确运行
+    m_timer = new QTimer(this);
+    m_timer->setTimerType(Qt::PreciseTimer);
+    connect(m_timer, &QTimer::timeout, this, &ModbusWorker::onTimeout);
+    m_timer->start(m_cfg.samplePeriodMs);
     onTimeout();   // 立即采集一次
 }
 
 void ModbusWorker::stop() {
-    m_timer.stop();
+    if (m_timer) { m_timer->stop(); m_timer->deleteLater(); m_timer = nullptr; }
     m_running = false;
     if (m_master) m_master->disconnectDevice();
     emit statusMessage("已停止");
@@ -51,8 +54,8 @@ void ModbusWorker::stop() {
 
 void ModbusWorker::setSamplePeriod(int ms) {
     m_cfg.samplePeriodMs = ms;
-    if (m_running && m_timer.isActive()) {
-        m_timer.start(ms);  // 重启定时器，立即应用新周期
+    if (m_running && m_timer && m_timer->isActive()) {
+        m_timer->start(ms);  // 重启定时器，立即应用新周期
     }
 }
 
