@@ -27,7 +27,6 @@
 #include <QtMath>
 #include <QPainter>
 #include <QPainterPath>
-#include <random>
 #include <QPlainTextEdit>
 #include <QStringList>
 
@@ -97,6 +96,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     loadConfig();
     applyConfigToUi();
     rebuildCards();
+    rebuildAlarms();
     rebuildIdSelectors();
     m_chartMgr.setupNodes(m_cfg.startNodeId, m_cfg.nodeCount);
 }
@@ -153,7 +153,6 @@ void MainWindow::buildUi() {
     m_startBtn = new QPushButton("开始");
     m_stopBtn = new QPushButton("停止");
     m_stopBtn->setEnabled(false);
-    auto *simBtn = new QPushButton("模拟模式");
 
     form->addRow("串口", portRow);
     form->addRow("波特率", m_baudCombo);
@@ -165,7 +164,6 @@ void MainWindow::buildUi() {
     form->addRow("", m_csvBtn);
     form->addRow(m_startBtn);
     form->addRow(m_stopBtn);
-    form->addRow(simBtn);
 
     // --- 温度卡片区域（网格布局，8 个卡片） ---
     auto *cardGroup = new QGroupBox("当前温度");
@@ -174,8 +172,15 @@ void MainWindow::buildUi() {
     m_cardLayout->setSpacing(4);
     m_cardContainer = new QWidget;
 
+    // --- 报警设置组（节点阈值，可实时修改） ---
+    m_alarmGroup = new QGroupBox("报警温度阈值 (℃)");
+    m_alarmLayout = new QGridLayout(m_alarmGroup);
+    m_alarmLayout->setContentsMargins(4, 4, 4, 4);
+    m_alarmLayout->setSpacing(4);
+
     leftLay->addWidget(configGroup, 0);
-    leftLay->addWidget(cardGroup, 1);  // 卡片占据左侧剩余空间
+    leftLay->addWidget(m_alarmGroup, 0);   // 报警组固定高度
+    leftLay->addWidget(cardGroup, 1);       // 卡片占据左侧剩余空间
 
     // ===== 右侧面板（曲线 + ID选择器 + 表格） =====
     auto *rightPanel = new QWidget;
@@ -241,32 +246,20 @@ void MainWindow::buildUi() {
         if (idx >= 0) m_portCombo->setCurrentIndex(idx);
         appendLog(QString("串口列表已刷新，共 %1 个").arg(m_portCombo->count()));
     });
-    connect(simBtn,     &QPushButton::clicked, this, [this, simBtn]() {
-        if (m_simRunning) {
-            onSimStop();
-            simBtn->setText("模拟模式");
-        } else {
-            onSimStart();
-            simBtn->setText("停止模拟");
-        }
-    });
     // 采集周期变更：运行中实时生效
     connect(m_periodSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int ms) {
-        if (m_simRunning && m_simTimer) {
-            m_simTimer->start(ms);   // 模拟模式：直接重启定时器
-            appendLog(QString("采集周期已更新为 %1 ms").arg(ms));
-        } else if (m_worker) {
-            // 实际采集模式：转发给子线程
+        if (m_worker) {
+            // 转发给子线程，立即生效
             QMetaObject::invokeMethod(m_worker, "setSamplePeriod", Qt::QueuedConnection, Q_ARG(int, ms));
             appendLog(QString("采集周期已更新为 %1 ms").arg(ms));
         }
     });
     connect(m_startIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int){
-        applyUiToConfig(); rebuildCards(); rebuildIdSelectors();
+        applyUiToConfig(); rebuildCards(); rebuildAlarms(); rebuildIdSelectors();
         m_chartMgr.setupNodes(m_cfg.startNodeId, m_cfg.nodeCount);
     });
     connect(m_nodeCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int){
-        applyUiToConfig(); rebuildCards(); rebuildIdSelectors();
+        applyUiToConfig(); rebuildCards(); rebuildAlarms(); rebuildIdSelectors();
         m_chartMgr.setupNodes(m_cfg.startNodeId, m_cfg.nodeCount);
     });
 }
@@ -282,7 +275,12 @@ void MainWindow::applyConfigToUi() {
     m_startIdSpin->setValue(m_cfg.startNodeId);
     m_nodeCountSpin->setValue(m_cfg.nodeCount);
     m_periodSpin->setValue(m_cfg.samplePeriodMs);
-    m_csvDirLabel->setText(m_cfg.resolvedCsvDir());
+    QString csvDir = m_cfg.resolvedCsvDir();
+    // 首次运行若目录不存在则创建（避免空目录被误判为异常）
+    if (!QDir(csvDir).exists()) {
+        QDir().mkpath(csvDir);
+    }
+    m_csvDirLabel->setText(csvDir);
 }
 
 void MainWindow::applyUiToConfig() {
@@ -292,7 +290,7 @@ void MainWindow::applyUiToConfig() {
     m_cfg.startNodeId    = m_startIdSpin->value();
     m_cfg.nodeCount      = m_nodeCountSpin->value();
     m_cfg.samplePeriodMs = m_periodSpin->value();
-    m_cfg.csvDir         = m_csvDirLabel->text();
+    // csvDir 不再由 UI 控制，始终使用项目根目录/data
     m_cfg.ensureDefaults();
 }
 
@@ -327,6 +325,68 @@ void MainWindow::rebuildCards() {
         m_cardLabels.insert(id, val);
         m_cardLayout->addWidget(card, i / cols, i % cols);
     }
+}
+
+void MainWindow::rebuildAlarms() {
+    if (!m_alarmLayout) return;
+    // 清空旧控件
+    while (m_alarmLayout->count()) {
+        auto *item = m_alarmLayout->takeAt(0);
+        if (item->widget()) item->widget()->deleteLater();
+    }
+    m_alarmLowSpin  = nullptr;
+    m_alarmHighSpin = nullptr;
+
+    // 表头
+    auto *hLow  = new QLabel("下限 (℃)");
+    auto *hHigh = new QLabel("上限 (℃)");
+    QFont hf = hLow->font(); hf.setBold(true);
+    hLow->setFont(hf); hHigh->setFont(hf);
+    hLow->setAlignment(Qt::AlignCenter);
+    hHigh->setAlignment(Qt::AlignCenter);
+    m_alarmLayout->addWidget(hLow,  0, 0);
+    m_alarmLayout->addWidget(hHigh, 0, 1);
+
+    // 全局共用的下限/上限
+    auto *lowSpin  = new QDoubleSpinBox;
+    lowSpin->setRange(-100.0, 200.0);
+    lowSpin->setDecimals(1);
+    lowSpin->setSingleStep(0.5);
+    lowSpin->setValue(m_cfg.alarmLow);
+    connect(lowSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [this](double v) {
+                if (v > m_cfg.alarmHigh) {
+                    // 防呆：不允许下限超过上限
+                    m_alarmLowSpin->blockSignals(true);
+                    m_alarmLowSpin->setValue(m_cfg.alarmHigh);
+                    m_alarmLowSpin->blockSignals(false);
+                    return;
+                }
+                m_cfg.alarmLow = v;
+                appendLog(QString("报警下限已更新为 %1℃ (全局生效)").arg(v));
+            });
+
+    auto *highSpin = new QDoubleSpinBox;
+    highSpin->setRange(-100.0, 200.0);
+    highSpin->setDecimals(1);
+    highSpin->setSingleStep(0.5);
+    highSpin->setValue(m_cfg.alarmHigh);
+    connect(highSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [this](double v) {
+                if (v < m_cfg.alarmLow) {
+                    m_alarmHighSpin->blockSignals(true);
+                    m_alarmHighSpin->setValue(m_cfg.alarmLow);
+                    m_alarmHighSpin->blockSignals(false);
+                    return;
+                }
+                m_cfg.alarmHigh = v;
+                appendLog(QString("报警上限已更新为 %1℃ (全局生效)").arg(v));
+            });
+
+    m_alarmLowSpin  = lowSpin;
+    m_alarmHighSpin = highSpin;
+    m_alarmLayout->addWidget(lowSpin,  1, 0);
+    m_alarmLayout->addWidget(highSpin, 1, 1);
 }
 
 void MainWindow::rebuildIdSelectors() {
@@ -384,6 +444,8 @@ void MainWindow::onChooseCsvDir() {
     QString dir = QFileDialog::getExistingDirectory(this, "选择 CSV 保存目录", m_csvDirLabel->text());
     if (!dir.isEmpty()) {
         m_csvDirLabel->setText(dir);
+        m_cfg.csvDir = dir;
+        m_cfg.csvDirUserSet = true;  // 标记用户显式选择，下次启动仍用此目录
         appendLog("CSV 目录已更改为: " + dir);
     }
 }
@@ -484,86 +546,4 @@ void MainWindow::appendLog(const QString &msg) {
     if (!m_logBox) return;
     QString line = QDateTime::currentDateTime().toString("[HH:mm:ss.zzz] ") + msg;
     m_logBox->appendPlainText(line);
-}
-
-void MainWindow::startSimulation() {
-    onSimStart();
-}
-
-void MainWindow::onSimStart() {
-    if (m_simRunning) return;
-    applyUiToConfig();
-    m_cfg.save();
-
-    // 新建 CSV 会话
-    if (!m_csv.startSession(m_cfg.resolvedCsvDir(), QDateTime::currentDateTime())) {
-        statusBar()->showMessage("CSV 文件创建失败", 5000);
-        appendLog("[错误] CSV 文件创建失败");
-        return;
-    }
-    m_chartMgr.clear();
-    m_simElapsedSec = 0;
-    m_simRunning = true;
-    appendLog(QString("模拟模式启动 | 节点ID%1~ID%2 周期=%3ms")
-        .arg(m_cfg.startNodeId).arg(m_cfg.startNodeId + m_cfg.nodeCount - 1)
-        .arg(m_cfg.samplePeriodMs));
-    appendLog(QString("CSV 文件: %1").arg(QFileInfo(m_csv.currentFile()).fileName()));
-
-    // 创建定时器，按采样周期触发
-    if (!m_simTimer) {
-        m_simTimer = new QTimer(this);
-        connect(m_simTimer, &QTimer::timeout, this, &MainWindow::onSimTick);
-    }
-    m_simTimer->start(m_cfg.samplePeriodMs);
-    m_startBtn->setEnabled(false);
-    m_stopBtn->setEnabled(true);
-    statusBar()->showMessage("模拟模式运行中");
-}
-
-void MainWindow::onSimStop() {
-    if (m_simTimer) m_simTimer->stop();
-    m_simRunning = false;
-    m_csv.close();
-    m_startBtn->setEnabled(true);
-    m_stopBtn->setEnabled(false);
-    statusBar()->showMessage("模拟模式已停止");
-    appendLog("模拟模式已停止，CSV 文件已关闭");
-}
-
-void MainWindow::onSimTick() {
-    m_simElapsedSec++;
-    QVector<Sample> samples;
-    qint64 now = QDateTime::currentMSecsSinceEpoch();
-
-    // 生成正弦波温度数据
-    // ID1: 20℃ 基准，振幅 5℃，周期 60 秒
-    // ID2: 25℃ 基准，振幅 8℃，周期 90 秒，相位偏移 30 秒
-    for (int i = 0; i < m_cfg.nodeCount; ++i) {
-        int id = m_cfg.startNodeId + i;
-        double baseTemp = (id == 1) ? 20.0 : 25.0;
-        double amplitude = (id == 1) ? 5.0 : 8.0;
-        double period = (id == 1) ? 60.0 : 90.0;
-        double phase = (id == 1) ? 0.0 : 30.0;
-
-        double temp = baseTemp + amplitude * qSin(2.0 * M_PI * (m_simElapsedSec - phase) / period);
-
-        // 添加随机噪声 ±0.3℃
-        static std::mt19937 rng(42);
-        std::uniform_real_distribution<double> noise(-0.3, 0.3);
-        temp += noise(rng);
-
-        Sample s;
-        s.timestampMs = now;
-        s.nodeId = id;
-        s.tempCelsius = temp;
-        s.raw = static_cast<quint16>(qRound(temp * 10.0));
-        s.online = 1;
-        s.alarm = checkAlarm(temp,
-            m_cfg.alarmLow.value(id, -10.0),
-            m_cfg.alarmHigh.value(id, 60.0));
-        samples.append(s);
-    }
-
-    // 触发数据处理
-    onDataReady(samples);
 }

@@ -4,19 +4,27 @@
 #include <QDir>
 #include <QCoreApplication>
 
+static QString defaultCsvDir() {
+    return QCoreApplication::applicationDirPath() + "/data";
+}
+
 void AppConfig::ensureDefaults() {
     if (csvDir.isEmpty()) {
-        // 默认使用当前工作目录下的 data 文件夹（项目根目录/data）
-        csvDir = QDir::currentPath() + "/data";
+        csvDir = defaultCsvDir();
     }
-    for (int id = startNodeId; id < startNodeId + nodeCount; ++id) {
-        if (!alarmLow.contains(id))  alarmLow[id]  = -10.0;
-        if (!alarmHigh.contains(id)) alarmHigh[id] = 60.0;
-    }
+    // 报警阈值全局默认
+    if (alarmLow > alarmHigh) alarmLow = alarmHigh;  // 防呆
 }
 
 QString AppConfig::resolvedCsvDir() const {
-    return csvDir;
+    if (csvDir.isEmpty())
+        return QDir::cleanPath(defaultCsvDir());
+
+    // 若以当前可执行目录为基准的相对路径，始终解析到 <appDir>/data
+    if (csvDir == defaultCsvDir() || csvDir == "data")
+        return QDir::cleanPath(defaultCsvDir());
+
+    return QDir::cleanPath(csvDir);
 }
 
 void AppConfig::load() {
@@ -31,15 +39,33 @@ void AppConfig::load() {
     nodeCount       = s.value("node/nodeCount", nodeCount).toInt();
     samplePeriodMs  = s.value("node/samplePeriodMs", samplePeriodMs).toInt();
     tempRegAddr     = static_cast<quint16>(s.value("node/tempRegAddr", tempRegAddr).toUInt());
-    csvDir          = s.value("csv/dir", csvDir).toString();
-
-    s.beginGroup("alarm");
-    for (int id = startNodeId; id < startNodeId + nodeCount; ++id) {
-        alarmLow[id]  = s.value(QString::number(id) + "/low",  -10.0).toDouble();
-        alarmHigh[id] = s.value(QString::number(id) + "/high",  60.0).toDouble();
+    // csvDir：用户未显式选择目录时，使用相对路径 "data"
+    csvDirUserSet    = s.value("csv/userSet", false).toBool();
+    QString savedDir = s.value("csv/dir").toString();
+    QString appDir   = QCoreApplication::applicationDirPath();
+    if (csvDirUserSet && !savedDir.isEmpty()) {
+        // 保留用户自定义目录；但如果保存的目录和当前程序不在同一目录树（例如旧 build 目录），
+        // 则回退到默认相对路径，避免移动/重装包后仍指向失效路径。
+        QString canonicalSaved = QDir(savedDir).canonicalPath();
+        QString canonicalApp   = QDir(appDir).canonicalPath();
+        bool sameTree = !canonicalSaved.isEmpty()
+                        && (canonicalSaved == canonicalApp
+                            || canonicalSaved.startsWith(canonicalApp + "/"));
+        if (!sameTree) {
+            csvDir = "data";
+            csvDirUserSet = false;
+        } else {
+            csvDir = savedDir;
+        }
+    } else {
+        csvDir = "data";
+        csvDirUserSet = false;
     }
+    // 报警阈值（全局）
+    s.beginGroup("alarm");
+    alarmLow  = s.value("global/low",  -10.0).toDouble();
+    alarmHigh = s.value("global/high",  60.0).toDouble();
     s.endGroup();
-    ensureDefaults();
 }
 
 void AppConfig::save() {
@@ -54,14 +80,17 @@ void AppConfig::save() {
     s.setValue("node/nodeCount", nodeCount);
     s.setValue("node/samplePeriodMs", samplePeriodMs);
     s.setValue("node/tempRegAddr", tempRegAddr);
-    s.setValue("csv/dir", csvDir);
-
+    // csvDir：默认保存相对路径 "data"，移动/重装包后仍能自动解析到 <appDir>/data
+    if (csvDirUserSet && !csvDir.isEmpty() && csvDir != "data") {
+        s.setValue("csv/dir", csvDir);
+        s.setValue("csv/userSet", true);
+    } else {
+        s.setValue("csv/dir", "data");
+        s.setValue("csv/userSet", false);
+    }
+    // 报警阈值（全局）
     s.beginGroup("alarm");
-    for (auto it = alarmLow.constBegin(); it != alarmLow.constEnd(); ++it) {
-        s.setValue(QString::number(it.key()) + "/low", it.value());
-    }
-    for (auto it = alarmHigh.constBegin(); it != alarmHigh.constEnd(); ++it) {
-        s.setValue(QString::number(it.key()) + "/high", it.value());
-    }
+    s.setValue("global/low",  alarmLow);
+    s.setValue("global/high", alarmHigh);
     s.endGroup();
 }

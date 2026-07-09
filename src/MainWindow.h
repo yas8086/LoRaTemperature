@@ -15,15 +15,14 @@ class QTableWidget;
 class QLabel;
 class QPushButton;
 class QCheckBox;
-class QTimer;
 class QPlainTextEdit;
+class QDoubleSpinBox;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    void startSimulation();
 private slots:
     void onStart();
     void onStop();
@@ -32,9 +31,6 @@ private slots:
     void onStatus(const QString &msg);
     void onChooseCsvDir();
     void onIdToggled(bool checked);
-    void onSimTick();
-    void onSimStart();
-    void onSimStop();
 private:
     void buildUi();
     void loadConfig();
@@ -42,6 +38,7 @@ private:
     void applyUiToConfig();
     void rebuildCards();
     void rebuildIdSelectors();
+    void rebuildAlarms();
     void appendLog(const QString &msg);
 
     // 配置面板控件
@@ -56,6 +53,12 @@ private:
     QPushButton *m_startBtn;
     QPushButton *m_stopBtn;
     QPushButton *m_refreshPortBtn = nullptr;   // 刷新串口列表
+
+    // 报警设置（全局共用一组上下限）
+    QWidget         *m_alarmGroup = nullptr;
+    QGridLayout     *m_alarmLayout = nullptr;
+    QDoubleSpinBox  *m_alarmLowSpin  = nullptr;
+    QDoubleSpinBox  *m_alarmHighSpin = nullptr;
 
     // 温度卡片（网格布局，可多显示几个）
     QWidget       *m_cardContainer;
@@ -77,9 +80,4 @@ private:
     CsvWriter  m_csv;
     ModbusWorker *m_worker = nullptr;
     QThread   *m_thread = nullptr;
-
-    // 模拟模式
-    QTimer    *m_simTimer = nullptr;
-    int        m_simElapsedSec = 0;
-    bool       m_simRunning = false;
 };

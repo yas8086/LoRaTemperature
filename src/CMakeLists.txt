@@ -23,3 +23,8 @@ target_link_libraries(LoRaTemperature PRIVATE
 )
 
 target_include_directories(LoRaTemperature PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+install(TARGETS LoRaTemperature
+    RUNTIME DESTINATION bin
+    BUNDLE DESTINATION .
+)

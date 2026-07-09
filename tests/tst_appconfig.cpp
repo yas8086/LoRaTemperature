@@ -25,14 +25,14 @@ void TestAppConfig::initTestCase() {
 void TestAppConfig::defaultsPersist() {
     AppConfig cfg;
     cfg.load();                       // 全用默认值
-    cfg.alarmLow[1]  = -5.0;
-    cfg.alarmHigh[1] = 55.0;
+    cfg.alarmLow  = -5.0;
+    cfg.alarmHigh = 55.0;
     cfg.save();
 
     AppConfig cfg2;
     cfg2.load();
-    QCOMPARE(cfg2.alarmLow.value(1),  -5.0);
-    QCOMPARE(cfg2.alarmHigh.value(1), 55.0);
+    QCOMPARE(cfg2.alarmLow,  -5.0);
+    QCOMPARE(cfg2.alarmHigh, 55.0);
     QCOMPARE(cfg2.tempRegAddr, quint16(0x76C1));
     QCOMPARE(cfg2.samplePeriodMs, 2000);
 }

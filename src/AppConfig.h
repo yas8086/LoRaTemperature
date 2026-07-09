@@ -19,11 +19,12 @@ public:
     quint16 tempRegAddr      = 0x76C1;
 
     // CSV
-    QString csvDir;             // 空=默认 data/
+    QString csvDir;             // 空=默认项目根目录/data
+    bool    csvDirUserSet = false;  // 标记用户是否显式选择过目录
 
-    // 报警阈值（key=nodeId）
-    QHash<int, qreal> alarmLow;
-    QHash<int, qreal> alarmHigh;
+    // 报警阈值（全局共享，所有节点用同一组）
+    qreal alarmLow  = -10.0;
+    qreal alarmHigh = 60.0;
 
     void load();                // 从 QSettings 读
     void save();                // 写 QSettings

@@ -95,9 +95,7 @@ void ModbusWorker::onReplyFinished() {
         s.raw         = raw;
         s.tempCelsius = parseTempCelsius(raw);
         s.online      = 1;
-        s.alarm       = checkAlarm(s.tempCelsius,
-                                   m_cfg.alarmLow.value(s.nodeId, -10.0),
-                                   m_cfg.alarmHigh.value(s.nodeId, 60.0));
+        s.alarm       = checkAlarm(s.tempCelsius, m_cfg.alarmLow, m_cfg.alarmHigh);
         samples.append(s);
     }
     emit dataReady(samples);
