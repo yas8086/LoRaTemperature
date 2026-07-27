@@ -1,5 +1,9 @@
 build/
 data/
+dist/
+.qtcreator/
+软著材料/
+lora温度集中器教程/
 *.user
 *.user.*
 *.autosave

@@ -20,8 +20,8 @@ void TestCsvWriter::writesHeaderAndRows() {
     QVERIFY(w.isOpen());
 
     Sample s1{ QDateTime(QDate(2026,6,29), QTime(14,30,1,123)).toMSecsSinceEpoch(),
-               1, 191, 19.1, 1, 0 };
-    Sample s2{ s1.timestampMs, 2, 253, 25.3, 1, 0 };
+               1, 191, 19.1, 0.0, false, 1, 0 };
+    Sample s2{ s1.timestampMs, 2, 253, 25.3, 0.0, false, 1, 0 };
     w.write({s1, s2});
     w.close();
 
@@ -31,9 +31,9 @@ void TestCsvWriter::writesHeaderAndRows() {
     // 检查 UTF-8 BOM
     QCOMPARE(raw.left(3), QByteArray("\xEF\xBB\xBF", 3));
     QString content = QString::fromUtf8(raw);
-    QVERIFY(content.contains("timestamp,node_id,temp_celsius,raw,online,alarm"));
-    QVERIFY(content.contains("2026-06-29 14:30:01.123,1,19.1,191,1,0"));
-    QVERIFY(content.contains("2026-06-29 14:30:01.123,2,25.3,253,1,0"));
+    QVERIFY(content.contains("timestamp,node_id,temp_celsius,pressure_pa,raw,online,alarm"));
+    QVERIFY(content.contains("2026-06-29 14:30:01.123,1,19.1,,0X00BF,1,0"));
+    QVERIFY(content.contains("2026-06-29 14:30:01.123,2,25.3,,0X00FD,1,0"));
 }
 
 QTEST_MAIN(TestCsvWriter)

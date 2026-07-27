@@ -29,6 +29,7 @@
 #include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QStringList>
+#include <QLineEdit>
 
 // 生成温度计图标作为窗口 logo
 static QIcon makeThermometerIcon() {
@@ -148,6 +149,8 @@ void MainWindow::buildUi() {
     m_startIdSpin = new QSpinBox; m_startIdSpin->setRange(1, 200);
     m_nodeCountSpin = new QSpinBox; m_nodeCountSpin->setRange(1, 16);
     m_periodSpin = new QSpinBox; m_periodSpin->setRange(500, 60000); m_periodSpin->setSingleStep(500);
+    m_pressureIdsEdit = new QLineEdit;
+    m_pressureIdsEdit->setPlaceholderText("逗号分隔，如 6");
     m_csvDirLabel = new QLabel;
     m_csvBtn = new QPushButton("选择...");
     m_startBtn = new QPushButton("开始");
@@ -160,13 +163,14 @@ void MainWindow::buildUi() {
     form->addRow("起始ID", m_startIdSpin);
     form->addRow("节点数", m_nodeCountSpin);
     form->addRow("采样周期(ms)", m_periodSpin);
+    form->addRow("压力传感器ID", m_pressureIdsEdit);
     form->addRow("CSV目录", m_csvDirLabel);
     form->addRow("", m_csvBtn);
     form->addRow(m_startBtn);
     form->addRow(m_stopBtn);
 
-    // --- 温度卡片区域（网格布局，8 个卡片） ---
-    auto *cardGroup = new QGroupBox("当前温度");
+    // --- 数据卡片区域（网格布局，8 个卡片） ---
+    auto *cardGroup = new QGroupBox("当前数据");
     m_cardLayout = new QGridLayout(cardGroup);
     m_cardLayout->setContentsMargins(4, 4, 4, 4);
     m_cardLayout->setSpacing(4);
@@ -199,8 +203,8 @@ void MainWindow::buildUi() {
     m_idSelectorLayout->setSpacing(4);
     m_idSelectorPanel = new QWidget;
 
-    m_table = new QTableWidget(0, 5);
-    m_table->setHorizontalHeaderLabels({"时间","节点","温度(℃)","原始值","报警"});
+    m_table = new QTableWidget(0, 6);
+    m_table->setHorizontalHeaderLabels({"时间","节点","温度(℃)","压力(Pa)","原始值","报警"});
     m_table->horizontalHeader()->setStretchLastSection(true);
 
     // 图表:表格 = 3:2，即图表是表格的 1.5 倍（满足 1.2~1.8 范围）
@@ -262,6 +266,10 @@ void MainWindow::buildUi() {
         applyUiToConfig(); rebuildCards(); rebuildAlarms(); rebuildIdSelectors();
         m_chartMgr.setupNodes(m_cfg.startNodeId, m_cfg.nodeCount);
     });
+    // 压力ID变更：实时更新配置和卡片
+    connect(m_pressureIdsEdit, &QLineEdit::textChanged, this, [this](const QString &){
+        applyUiToConfig(); rebuildCards(); rebuildIdSelectors();
+    });
 }
 
 void MainWindow::loadConfig() {
@@ -275,6 +283,7 @@ void MainWindow::applyConfigToUi() {
     m_startIdSpin->setValue(m_cfg.startNodeId);
     m_nodeCountSpin->setValue(m_cfg.nodeCount);
     m_periodSpin->setValue(m_cfg.samplePeriodMs);
+    m_pressureIdsEdit->setText(m_cfg.pressureNodeIds);
     QString csvDir = m_cfg.resolvedCsvDir();
     // 首次运行若目录不存在则创建（避免空目录被误判为异常）
     if (!QDir(csvDir).exists()) {
@@ -290,6 +299,7 @@ void MainWindow::applyUiToConfig() {
     m_cfg.startNodeId    = m_startIdSpin->value();
     m_cfg.nodeCount      = m_nodeCountSpin->value();
     m_cfg.samplePeriodMs = m_periodSpin->value();
+    m_cfg.pressureNodeIds = m_pressureIdsEdit->text().trimmed();
     // csvDir 不再由 UI 控制，始终使用项目根目录/data
     m_cfg.ensureDefaults();
 }
@@ -302,10 +312,12 @@ void MainWindow::rebuildCards() {
     }
     m_cardLabels.clear();
 
+    const QSet<int> pressureIds = m_cfg.parsedPressureNodeIds();
     const int cols = 2;  // 每行 2 个卡片
     const int totalCards = 8;  // 始终显示 8 个卡片
     for (int i = 0; i < totalCards; ++i) {
         int id = m_cfg.startNodeId + i;
+        bool isPressure = pressureIds.contains(id);
         auto *card = new QFrame;
         card->setFrameShape(QFrame::Box);
         // 超出节点数的卡片用更暗的背景表示无数据
@@ -314,7 +326,7 @@ void MainWindow::rebuildCards() {
         card->setStyleSheet(QString("QFrame{background:%1;border:1px solid #ccc;border-radius:6px;}").arg(bg));
         auto *l = new QVBoxLayout(card);
         l->setContentsMargins(4, 4, 4, 4);
-        auto *title = new QLabel(QString("ID%1").arg(id));
+        auto *title = new QLabel(QString("ID%1 %2").arg(id).arg(isPressure ? "压力" : "温度"));
         title->setAlignment(Qt::AlignCenter);
         auto *val = new QLabel(active ? "--" : "无");
         val->setAlignment(Qt::AlignCenter);
@@ -469,6 +481,11 @@ void MainWindow::onStart() {
         .arg(m_cfg.portName).arg(m_cfg.baudRate).arg(m_cfg.slaveAddr)
         .arg(m_cfg.startNodeId).arg(m_cfg.startNodeId + m_cfg.nodeCount - 1)
         .arg(m_cfg.samplePeriodMs));
+    if (!m_cfg.parsedPressureNodeIds().isEmpty()) {
+        QStringList ids;
+        for (int id : m_cfg.parsedPressureNodeIds()) ids << QString::number(id);
+        appendLog(QString("压力传感器ID: %1").arg(ids.join(",")));
+    }
     appendLog(QString("CSV 文件: %1").arg(QFileInfo(m_csv.currentFile()).fileName()));
 
     // 启动子线程
@@ -479,6 +496,7 @@ void MainWindow::onStart() {
     connect(m_worker, &ModbusWorker::dataReady, this, &MainWindow::onDataReady);
     connect(m_worker, &ModbusWorker::error, this, &MainWindow::onError);
     connect(m_worker, &ModbusWorker::statusMessage, this, &MainWindow::onStatus);
+    connect(m_worker, &ModbusWorker::frameLog, this, &MainWindow::appendLog);
     m_thread->start();
     QMetaObject::invokeMethod(m_worker, "start", Qt::QueuedConnection,
                               Q_ARG(AppConfig, m_cfg));
@@ -498,16 +516,30 @@ void MainWindow::onStop() {
 
 void MainWindow::onDataReady(QVector<Sample> samples) {
     m_csv.write(samples);
+    // 所有节点的温度都绘制到曲线（包括压力节点的温度）
     m_chartMgr.append(samples);
     for (const auto &s : samples) {
         auto it = m_cardLabels.find(s.nodeId);
         if (it != m_cardLabels.end()) {
-            (*it)->setText(QString::number(s.tempCelsius, 'f', 1) + " ℃");
-            if (s.alarm == 1)      (*it)->setStyleSheet("color:white;background:#c0392b;");
-            else if (s.alarm == -1)(*it)->setStyleSheet("color:white;background:#2980b9;");
-            else                   (*it)->setStyleSheet("color:#222;background:#f5f5f5;");
+            if (s.online == 0) {
+                (*it)->setText("--");
+                (*it)->setStyleSheet("color:#999;background:#f5f5f5;");
+            } else if (s.isPressure) {
+                // 压力节点同时显示压力和温度
+                QString txt = QString::number(s.pressurePa / 1000.0, 'f', 3) + " kPa\n"
+                            + QString::number(s.tempCelsius, 'f', 1) + " ℃";
+                (*it)->setText(txt);
+                if (s.alarm == 1)      (*it)->setStyleSheet("color:white;background:#c0392b;");
+                else if (s.alarm == -1)(*it)->setStyleSheet("color:white;background:#2980b9;");
+                else                   (*it)->setStyleSheet("color:#222;background:#f5f5f5;");
+            } else {
+                (*it)->setText(QString::number(s.tempCelsius, 'f', 1) + " ℃");
+                if (s.alarm == 1)      (*it)->setStyleSheet("color:white;background:#c0392b;");
+                else if (s.alarm == -1)(*it)->setStyleSheet("color:white;background:#2980b9;");
+                else                   (*it)->setStyleSheet("color:#222;background:#f5f5f5;");
+            }
         }
-        // 报警日志
+        // 报警日志（所有节点的温度都参与报警）
         if (s.alarm == 1) {
             appendLog(QString("[报警] ID%1 超上限: %2℃").arg(s.nodeId).arg(QString::number(s.tempCelsius, 'f', 1)));
         } else if (s.alarm == -1) {
@@ -521,8 +553,10 @@ void MainWindow::onDataReady(QVector<Sample> samples) {
         m_table->setItem(row, 1, new QTableWidgetItem(QString::number(s.nodeId)));
         m_table->setItem(row, 2, new QTableWidgetItem(QString::number(s.tempCelsius, 'f', 1)));
         m_table->setItem(row, 3, new QTableWidgetItem(
-            QString("0x%1").arg(s.raw, 4, 16, QChar('0')).toUpper()));
+            s.isPressure ? QString::number(s.pressurePa, 'f', 0) : ""));
         m_table->setItem(row, 4, new QTableWidgetItem(
+            QString("0x%1").arg(s.raw, 4, 16, QChar('0')).toUpper()));
+        m_table->setItem(row, 5, new QTableWidgetItem(
             s.alarm==1?"超上限":(s.alarm==-1?"超下限":"正常")));
         // 限制行数
         while (m_table->rowCount() > 500) m_table->removeRow(m_table->rowCount()-1);

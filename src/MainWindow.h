@@ -17,6 +17,7 @@ class QPushButton;
 class QCheckBox;
 class QPlainTextEdit;
 class QDoubleSpinBox;
+class QLineEdit;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -48,6 +49,7 @@ private:
     QSpinBox  *m_startIdSpin;
     QSpinBox  *m_nodeCountSpin;
     QSpinBox  *m_periodSpin;
+    QLineEdit *m_pressureIdsEdit;   // 压力传感器ID列表
     QLabel    *m_csvDirLabel;
     QPushButton *m_csvBtn;
     QPushButton *m_startBtn;

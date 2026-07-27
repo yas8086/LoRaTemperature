@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LoRa 温度监测 - 界面预览</title>
+<style>
+body { font-family: 'Microsoft YaHei', sans-serif; margin: 20px; background: #f0f0f0; }
+h1 { color: #2c3e50; }
+img { max-width: 100%; border: 2px solid #34495e; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.info { background: white; padding: 15px 20px; border-radius: 8px; margin: 15px 0; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+.info h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
+.info ul { line-height: 1.8; }
+.tag { display: inline-block; background: #3498db; color: white; padding: 2px 8px; border-radius: 4px; font-size: 13px; margin-right: 5px; }
+</style>
+</head>
+<body>
+<h1>LoRa 温度实时监测应用 - 界面预览</h1>
+<div class="info">
+<p><strong>分辨率：</strong>1100 x 700 | <strong>平台：</strong>Qt 6.10.1 offscreen 渲染</p>
+</div>
+<img src="screenshot.png" alt="应用界面截图">
+<div class="info">
+<h2>界面说明</h2>
+<ul>
+<li><span class="tag">左侧</span>配置面板：串口选择、波特率、从机地址、起始ID、节点数、采样周期、CSV目录、开始/停止按钮</li>
+<li><span class="tag">右上</span>温度卡片：每个节点一张卡片，大字号显示当前温度（未采集时显示"--"），报警时变色</li>
+<li><span class="tag">中部</span>实时曲线：QtCharts 绘制，X轴为时间，Y轴为温度，每节点一条曲线，保留最近30分钟</li>
+<li><span class="tag">底部</span>数据表格：时间、节点、温度、原始值、报警状态，最新置顶，最多500行</li>
+</ul>
+</div>
+<div class="info">
+<h2>运行状态</h2>
+<ul>
+<li>编译：<strong>通过</strong>（CMake + Qt6.10.1）</li>
+<li>单元测试：<strong>3/3 全部 PASS</strong>（tst_sample / tst_appconfig / tst_csvwriter）</li>
+<li>界面初始化：<strong>正常</strong>（卡片、曲线、表格均正确渲染）</li>
+<li>功能测试：<strong>需硬件联调</strong>（无传感器时点"开始"会提示串口错误）</li>
+</ul>
+</div>
+</body>
+</html>

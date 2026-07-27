@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QVector>
+#include <QHash>
 
 class QModbusRtuSerialClient;
 class QModbusReply;
@@ -21,6 +22,7 @@ signals:
     void dataReady(QVector<Sample> samples);
     void error(const QString &msg);
     void statusMessage(const QString &msg);
+    void frameLog(const QString &msg);   // 原始 Modbus 帧日志（用于调试）
 private slots:
     void onTimeout();
     void onReplyFinished();
@@ -30,4 +32,9 @@ private:
     AppConfig m_cfg;
     int   m_failCount = 0;
     bool  m_running = false;
+
+    // 本轮采集的聚合数据（按 nodeId 合并温度和压力结果）
+    qint64 m_batchTimestamp = 0;
+    int    m_pendingReplies = 0;
+    QHash<int, Sample> m_batchSamples;
 };

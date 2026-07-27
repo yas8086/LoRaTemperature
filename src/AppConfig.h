@@ -1,6 +1,7 @@
 #pragma once
 #include <QString>
 #include <QHash>
+#include <QSet>
 
 class AppConfig {
 public:
@@ -17,6 +18,8 @@ public:
     int     nodeCount        = 2;
     int     samplePeriodMs   = 2000;
     quint16 tempRegAddr      = 0x76C1;
+    quint16 pressureRegAddr  = 0x8EF9;   // 压力寄存器起始地址
+    QString pressureNodeIds  = "6";      // 压力传感器ID列表，逗号分隔，默认ID6
 
     // CSV
     QString csvDir;             // 空=默认项目根目录/data
@@ -30,4 +33,10 @@ public:
     void save();                // 写 QSettings
     void ensureDefaults();      // 填充默认阈值/CSV目录
     QString resolvedCsvDir() const; // 返回绝对路径，空则用 <appdir>/data
+
+    // 解析压力传感器ID集合（逗号/空格分隔）
+    QSet<int> parsedPressureNodeIds() const;
+    bool isPressureNode(int id) const;
+    // 节点N的压力寄存器起始地址（每节点占2个寄存器）
+    quint16 pressureRegAddrForId(int id) const;
 };

@@ -10,6 +10,7 @@ private slots:
     void alarmNormal();
     void alarmHigh();
     void alarmLow();
+    void parsePressure();
 };
 
 void TestSample::parsePositive() {
@@ -29,6 +30,9 @@ void TestSample::alarmHigh() {
 }
 void TestSample::alarmLow() {
     QCOMPARE(checkAlarm(-10.1, -10.0, 60.0), -1);
+}
+void TestSample::parsePressure() {
+    QCOMPARE(parsePressurePa(0x000F, 0x4240), 1000000.0);
 }
 
 QTEST_APPLESS_MAIN(TestSample)

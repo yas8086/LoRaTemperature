@@ -12,7 +12,7 @@ bool CsvWriter::startSession(const QString &dir, const QDateTime &startTime) {
     m_out.setDevice(&m_file);
     m_out.setEncoding(QStringConverter::Utf8);
     m_out.setGenerateByteOrderMark(true);   // UTF-8 BOM，Excel 友好
-    m_out << "timestamp,node_id,temp_celsius,raw,online,alarm\n";
+    m_out << "timestamp,node_id,temp_celsius,pressure_pa,raw,online,alarm\n";
     m_out.flush();
     return true;
 }
@@ -24,6 +24,7 @@ void CsvWriter::write(const QVector<Sample> &samples) {
         m_out << dt.toString("yyyy-MM-dd HH:mm:ss.zzz") << ","
               << s.nodeId << ","
               << QString::number(s.tempCelsius, 'f', 1) << ","
+              << (s.isPressure ? QString::number(s.pressurePa, 'f', 0) : "") << ","
               << QString("0x%1").arg(s.raw, 4, 16, QChar('0')).toUpper() << ","
               << s.online << ","
               << s.alarm << "\n";

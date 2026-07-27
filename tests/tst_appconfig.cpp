@@ -34,6 +34,8 @@ void TestAppConfig::defaultsPersist() {
     QCOMPARE(cfg2.alarmLow,  -5.0);
     QCOMPARE(cfg2.alarmHigh, 55.0);
     QCOMPARE(cfg2.tempRegAddr, quint16(0x76C1));
+    QCOMPARE(cfg2.pressureRegAddr, quint16(0x8EF9));
+    QCOMPARE(cfg2.pressureNodeIds, QString("6"));
     QCOMPARE(cfg2.samplePeriodMs, 2000);
 }
 

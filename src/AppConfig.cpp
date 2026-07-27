@@ -3,6 +3,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QCoreApplication>
+#include <QRegularExpression>
 
 static QString defaultCsvDir() {
     return QCoreApplication::applicationDirPath() + "/data";
@@ -27,6 +28,25 @@ QString AppConfig::resolvedCsvDir() const {
     return QDir::cleanPath(csvDir);
 }
 
+QSet<int> AppConfig::parsedPressureNodeIds() const {
+    QSet<int> ids;
+    for (const QString &tok : pressureNodeIds.split(QRegularExpression("[,;\\s]+"), Qt::SkipEmptyParts)) {
+        bool ok = false;
+        int id = tok.toInt(&ok);
+        if (ok && id > 0) ids.insert(id);
+    }
+    return ids;
+}
+
+bool AppConfig::isPressureNode(int id) const {
+    return parsedPressureNodeIds().contains(id);
+}
+
+quint16 AppConfig::pressureRegAddrForId(int id) const {
+    // 节点ID从1开始，每节点占2个寄存器
+    return static_cast<quint16>(pressureRegAddr + 2 * (id - 1));
+}
+
 void AppConfig::load() {
     QSettings s;
     portName        = s.value("serial/portName", portName).toString();
@@ -39,6 +59,8 @@ void AppConfig::load() {
     nodeCount       = s.value("node/nodeCount", nodeCount).toInt();
     samplePeriodMs  = s.value("node/samplePeriodMs", samplePeriodMs).toInt();
     tempRegAddr     = static_cast<quint16>(s.value("node/tempRegAddr", tempRegAddr).toUInt());
+    pressureRegAddr = static_cast<quint16>(s.value("node/pressureRegAddr", pressureRegAddr).toUInt());
+    pressureNodeIds = s.value("node/pressureNodeIds", pressureNodeIds).toString();
     // csvDir：用户未显式选择目录时，使用相对路径 "data"
     csvDirUserSet    = s.value("csv/userSet", false).toBool();
     QString savedDir = s.value("csv/dir").toString();
@@ -64,7 +86,7 @@ void AppConfig::load() {
     // 报警阈值（全局）
     s.beginGroup("alarm");
     alarmLow  = s.value("global/low",  -10.0).toDouble();
-    alarmHigh = s.value("global/high",  60.0).toDouble();
+    alarmHigh = s.value("global/high", 60.0).toDouble();
     s.endGroup();
 }
 
@@ -80,6 +102,8 @@ void AppConfig::save() {
     s.setValue("node/nodeCount", nodeCount);
     s.setValue("node/samplePeriodMs", samplePeriodMs);
     s.setValue("node/tempRegAddr", tempRegAddr);
+    s.setValue("node/pressureRegAddr", pressureRegAddr);
+    s.setValue("node/pressureNodeIds", pressureNodeIds);
     // csvDir：默认保存相对路径 "data"，移动/重装包后仍能自动解析到 <appDir>/data
     if (csvDirUserSet && !csvDir.isEmpty() && csvDir != "data") {
         s.setValue("csv/dir", csvDir);
