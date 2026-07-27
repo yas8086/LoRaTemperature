@@ -16,6 +16,7 @@
 #include <QHeaderView>
 #include <QStatusBar>
 #include <QFileDialog>
+#include <QSplitter>
 #include <QDateTime>
 #include <QSerialPortInfo>
 #include <QChartView>
@@ -100,6 +101,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     rebuildAlarms();
     rebuildIdSelectors();
     m_chartMgr.setupNodes(m_cfg.startNodeId, m_cfg.nodeCount);
+
+    // 恢复上次拖动后的 splitter 布局（saveState 递归保存了所有嵌套子 splitter）
+    if (!m_cfg.splitterState.isEmpty())
+        m_outerSplitter->restoreState(m_cfg.splitterState);
 }
 
 MainWindow::~MainWindow() {
@@ -109,26 +114,30 @@ MainWindow::~MainWindow() {
         m_thread->wait();
     }
     m_csv.close();
+    if (m_outerSplitter)
+        m_cfg.splitterState = m_outerSplitter->saveState();
     m_cfg.save();
 }
 
 void MainWindow::buildUi() {
-    auto *central = new QWidget;
-    // 外层垂直布局：上=主面板，下=log框
-    auto *outerLay = new QVBoxLayout(central);
-    outerLay->setContentsMargins(0, 0, 0, 0);
-    outerLay->setSpacing(4);
+    // 外层垂直分隔：上=主面板，下=log框
+    m_outerSplitter = new QSplitter(Qt::Vertical);
+    m_outerSplitter->setHandleWidth(8);
+    m_outerSplitter->setChildrenCollapsible(false);
+    m_outerSplitter->setStyleSheet(
+        "QSplitter::handle { background: #d0d0d0; }"
+        "QSplitter::handle:horizontal { width: 8px; }"
+        "QSplitter::handle:vertical { height: 8px; }");
 
-    // 上方主面板（左右布局）
-    auto *mainPanel = new QWidget;
-    auto *mainLay = new QHBoxLayout(mainPanel);
-    mainLay->setContentsMargins(0, 0, 0, 0);
+    // 上方主面板（左右分隔）
+    m_mainSplitter = new QSplitter(Qt::Horizontal);
+    m_mainSplitter->setHandleWidth(8);
+    m_mainSplitter->setChildrenCollapsible(false);
 
-    // ===== 左侧面板（配置 + 卡片） =====
-    auto *leftPanel = new QWidget;
-    auto *leftLay = new QVBoxLayout(leftPanel);
-    leftLay->setContentsMargins(0, 0, 0, 0);
-    leftLay->setSpacing(8);
+    // ===== 左侧面板（配置 + 报警 + 卡片，垂直分隔） =====
+    m_leftSplitter = new QSplitter(Qt::Vertical);
+    m_leftSplitter->setHandleWidth(8);
+    m_leftSplitter->setChildrenCollapsible(false);
 
     // --- 配置区域 ---
     auto *configGroup = new QGroupBox("配置");
@@ -182,15 +191,18 @@ void MainWindow::buildUi() {
     m_alarmLayout->setContentsMargins(4, 4, 4, 4);
     m_alarmLayout->setSpacing(4);
 
-    leftLay->addWidget(configGroup, 0);
-    leftLay->addWidget(m_alarmGroup, 0);   // 报警组固定高度
-    leftLay->addWidget(cardGroup, 1);       // 卡片占据左侧剩余空间
+    configGroup->setMinimumHeight(280);
+    m_alarmGroup->setMinimumHeight(90);
+    cardGroup->setMinimumHeight(200);
+    m_leftSplitter->addWidget(configGroup);
+    m_leftSplitter->addWidget(m_alarmGroup);
+    m_leftSplitter->addWidget(cardGroup);
+    m_leftSplitter->setSizes({300, 90, 400});
 
-    // ===== 右侧面板（曲线 + ID选择器 + 表格） =====
-    auto *rightPanel = new QWidget;
-    auto *rightLay = new QVBoxLayout(rightPanel);
-    rightLay->setContentsMargins(0, 0, 0, 0);
-    rightLay->setSpacing(4);
+    // ===== 右侧面板（曲线 + ID选择器 + 表格，垂直分隔） =====
+    m_rightSplitter = new QSplitter(Qt::Vertical);
+    m_rightSplitter->setHandleWidth(8);
+    m_rightSplitter->setChildrenCollapsible(false);
 
     auto *chartView = new QChartView(m_chartMgr.chart());
     chartView->setRenderHint(QPainter::Antialiasing);
@@ -208,13 +220,17 @@ void MainWindow::buildUi() {
     m_table->horizontalHeader()->setStretchLastSection(true);
 
     // 图表:表格 = 3:2，即图表是表格的 1.5 倍（满足 1.2~1.8 范围）
-    rightLay->addWidget(chartView, 3);   // 曲线占 3 份
-    rightLay->addWidget(idGroup, 0);     // ID选择器固定高度
-    rightLay->addWidget(m_table, 2);     // 表格占 2 份
+    idGroup->setMinimumHeight(80);
+    m_table->setMinimumHeight(150);
+    m_rightSplitter->addWidget(chartView);   // 曲线
+    m_rightSplitter->addWidget(idGroup);     // ID选择器
+    m_rightSplitter->addWidget(m_table);     // 表格
+    m_rightSplitter->setSizes({390, 80, 260});
 
     // ===== 组装主面板 =====
-    mainLay->addWidget(leftPanel, 0);   // 左侧不拉伸
-    mainLay->addWidget(rightPanel, 1);  // 右侧拉伸
+    m_mainSplitter->addWidget(m_leftSplitter);   // 左侧
+    m_mainSplitter->addWidget(m_rightSplitter);  // 右侧
+    m_mainSplitter->setSizes({380, 820});
 
     // ===== 底部 log 框（宽度占整个应用） =====
     auto *logGroup = new QGroupBox("日志");
@@ -223,15 +239,17 @@ void MainWindow::buildUi() {
     m_logBox = new QPlainTextEdit;
     m_logBox->setReadOnly(true);
     m_logBox->setMaximumBlockCount(500);  // 最多 500 行
-    m_logBox->setFixedHeight(120);        // 固定高度
+    m_logBox->setMinimumHeight(100);      // 最小高度，可由 splitter 拖动调整
     QFont logFont("Monospace");
     logFont.setStyleHint(QFont::Monospace);
     m_logBox->setFont(logFont);
     logLay->addWidget(m_logBox);
 
-    outerLay->addWidget(mainPanel, 1);   // 主面板拉伸
-    outerLay->addWidget(logGroup, 0);    // log框固定高度
-    setCentralWidget(central);
+    logGroup->setMinimumHeight(80);
+    m_outerSplitter->addWidget(m_mainSplitter);   // 主面板
+    m_outerSplitter->addWidget(logGroup);         // log框
+    m_outerSplitter->setSizes({760, 120});
+    setCentralWidget(m_outerSplitter);
     statusBar()->showMessage("就绪");
     appendLog("应用启动");
 

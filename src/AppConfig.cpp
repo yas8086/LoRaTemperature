@@ -88,6 +88,9 @@ void AppConfig::load() {
     alarmLow  = s.value("global/low",  -10.0).toDouble();
     alarmHigh = s.value("global/high", 60.0).toDouble();
     s.endGroup();
+
+    // UI 布局
+    splitterState = s.value("ui/splitterState").toByteArray();
 }
 
 void AppConfig::save() {
@@ -117,4 +120,7 @@ void AppConfig::save() {
     s.setValue("global/low",  alarmLow);
     s.setValue("global/high", alarmHigh);
     s.endGroup();
+
+    // UI 布局
+    s.setValue("ui/splitterState", splitterState);
 }

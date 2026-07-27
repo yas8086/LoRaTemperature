@@ -2,6 +2,7 @@
 #include <QString>
 #include <QHash>
 #include <QSet>
+#include <QByteArray>
 
 class AppConfig {
 public:
@@ -28,6 +29,9 @@ public:
     // 报警阈值（全局共享，所有节点用同一组）
     qreal alarmLow  = -10.0;
     qreal alarmHigh = 60.0;
+
+    // UI 布局
+    QByteArray splitterState;   // 主窗口 QSplitter 状态（持久化拖动后的布局）
 
     void load();                // 从 QSettings 读
     void save();                // 写 QSettings

@@ -11,6 +11,7 @@ class QComboBox;
 class QSpinBox;
 class QHBoxLayout;
 class QGridLayout;
+class QSplitter;
 class QTableWidget;
 class QLabel;
 class QPushButton;
@@ -82,4 +83,8 @@ private:
     CsvWriter  m_csv;
     ModbusWorker *m_worker = nullptr;
     QThread   *m_thread = nullptr;
+    QSplitter *m_outerSplitter = nullptr;   // 顶层垂直分隔（主面板/日志），saveState 递归保存所有子 splitter
+    QSplitter *m_mainSplitter  = nullptr;   // 主面板水平分隔（左/右）
+    QSplitter *m_leftSplitter  = nullptr;   // 左侧垂直分隔（配置/报警/卡片）
+    QSplitter *m_rightSplitter = nullptr;   // 右侧垂直分隔（曲线/ID选择器/表格）
 };

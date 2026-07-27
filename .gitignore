@@ -2,6 +2,7 @@ build/
 data/
 dist/
 .qtcreator/
+.trae/
 软著材料/
 lora温度集中器教程/
 *.user
