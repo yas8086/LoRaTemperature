@@ -32,7 +32,25 @@
 #include <QStringList>
 #include <QLineEdit>
 
-// 生成温度计图标作为窗口 logo
+// 统一美化 QGroupBox：标题与边框留空，内容与边框留空
+static void styleGroupBox(QWidget *box) {
+    box->setStyleSheet(
+        "QGroupBox {"
+        "  border: 1px solid #aaaaaa;"
+        "  border-radius: 4px;"
+        "  margin-top: 8px;"
+        "  padding: 6px;"
+        "  padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin;"
+        "  subcontrol-position: top left;"
+        "  left: 10px;"
+        "  padding: 0 5px;"
+        "  color: #333333;"
+        "}");
+}
+
 static QIcon makeThermometerIcon() {
     const int sz = 64;
     QPixmap pix(sz, sz);
@@ -141,6 +159,7 @@ void MainWindow::buildUi() {
 
     // --- 配置区域 ---
     auto *configGroup = new QGroupBox("配置");
+    styleGroupBox(configGroup);
     auto *form = new QFormLayout(configGroup);
     m_portCombo = new QComboBox;
     m_refreshPortBtn = new QPushButton("刷新");
@@ -180,6 +199,7 @@ void MainWindow::buildUi() {
 
     // --- 数据卡片区域（网格布局，8 个卡片） ---
     auto *cardGroup = new QGroupBox("当前数据");
+    styleGroupBox(cardGroup);
     m_cardLayout = new QGridLayout(cardGroup);
     m_cardLayout->setContentsMargins(4, 4, 4, 4);
     m_cardLayout->setSpacing(4);
@@ -187,6 +207,7 @@ void MainWindow::buildUi() {
 
     // --- 报警设置组（节点阈值，可实时修改） ---
     m_alarmGroup = new QGroupBox("报警温度阈值 (℃)");
+    styleGroupBox(m_alarmGroup);
     m_alarmLayout = new QGridLayout(m_alarmGroup);
     m_alarmLayout->setContentsMargins(4, 4, 4, 4);
     m_alarmLayout->setSpacing(4);
@@ -210,6 +231,7 @@ void MainWindow::buildUi() {
 
     // --- ID 选择器区域（放在曲线下方） ---
     auto *idGroup = new QGroupBox("曲线显示");
+    styleGroupBox(idGroup);
     m_idSelectorLayout = new QGridLayout(idGroup);
     m_idSelectorLayout->setContentsMargins(4, 4, 4, 4);
     m_idSelectorLayout->setSpacing(4);
@@ -234,6 +256,7 @@ void MainWindow::buildUi() {
 
     // ===== 底部 log 框（宽度占整个应用） =====
     auto *logGroup = new QGroupBox("日志");
+    styleGroupBox(logGroup);
     auto *logLay = new QVBoxLayout(logGroup);
     logLay->setContentsMargins(4, 4, 4, 4);
     m_logBox = new QPlainTextEdit;
